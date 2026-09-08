@@ -27,6 +27,7 @@ export default function Gallery(){
   useEffect(()=>{(async()=>{try{const r=await fetch(API+'?action=access-status',{cache:'no-store'});const d=await r.json();setAccessEnabled(!!d.enabled);if(d.enabled){setAccessMode('locked');setLoading(false)}else{setAccessMode('open');await load()}}catch(e){setError('Impossible de vérifier l’accès au carnet.');setLoading(false)}})()},[load]);
   useEffect(()=>{const album=new URLSearchParams(window.location.search).get('album');if(album)setSharedFolder(album)},[]);
   useEffect(()=>{if(folder!=='all'&&!folders.some(f=>f.id===folder))setFolder('all');if(adminFolder&&!folders.some(f=>f.id===adminFolder))setAdminFolder('')},[folders,folder,adminFolder]);
+  useEffect(()=>{if(!sharedFolder||loading||!demo||folders.some(f=>f.id===sharedFolder))return;const fallback=folders[0];if(!fallback)return;const url=new URL(window.location.href);url.searchParams.set('album',fallback.id);window.history.replaceState({},'',url);setSharedFolder(fallback.id)},[sharedFolder,loading,demo,folders]);
   const next=useCallback((n:number)=>{setIndex(i=>i===null?null:(i+n+visible.length)%visible.length);setZoom(false)},[visible.length]);
   useEffect(()=>{if(sharedFolder&&!loading){setIndex(visible.length?0:null);setPlaying(visible.length>1);setZoom(false)}},[sharedFolder,loading]);
   useEffect(()=>{if(!playing||index===null||zoom)return;const id=setInterval(()=>next(1),4500);return()=>clearInterval(id)},[playing,index,zoom,next]);
