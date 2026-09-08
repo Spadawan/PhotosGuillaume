@@ -1,6 +1,6 @@
 # Les échappées de Guillaume
 
-Galerie responsive, diaporama (4,5 secondes), visionneuse, zoom, plein écran, navigation au clavier et balayage tactile. L’Admin permet de créer, renommer, ordonner et supprimer des dossiers, puis d’ajouter, déplacer, supprimer, réordonner et convertir les photos en WebP (qualité 80 %, grand côté 2 560 px maximum).
+Galerie responsive, diaporama (4,5 secondes), visionneuse, zoom, plein écran, navigation au clavier et balayage tactile. L’Admin permet de créer, renommer, ordonner et supprimer des dossiers, puis d’ajouter, déplacer, supprimer, réordonner et convertir les photos. Il peut aussi verrouiller le carnet avec un code visiteur à 4 chiffres. en WebP (qualité 80 %, grand côté 2 560 px maximum).
 
 ## Hébergement GitHub Pages
 
@@ -18,7 +18,7 @@ Le dossier `github-pages/` est aussi un export prêt à publier, avec chemins re
 
 - Les originaux envoyés sont enregistrés dans R2. Les métadonnées, positions et sessions sont dans D1. Les données survivent aux rechargements et sont partagées entre visiteurs.
 - Le code Admin est défini exclusivement dans le secret serveur `ADMIN_CODE`, jamais dans le JavaScript public. Il peut être changé via les variables d’environnement Sites, suivi d’une publication.
-- Les sessions aléatoires expirent après 12 heures. Le jeton reste en mémoire dans l’onglet ; recharger la page exige de se reconnecter. Déconnexion révoque la session côté serveur.
+- Les sessions administrateur et visiteur aléatoires expirent après 12 heures. Le code visiteur à 4 chiffres est salé et haché côté serveur ; les images et les données de l’album restent inaccessibles sans session valide quand le verrou est actif. Le jeton reste en mémoire dans l’onglet ; recharger la page exige de se reconnecter. Déconnexion révoque la session côté serveur.
 - Limitation de connexion : 10 tentatives par IP et fenêtre de 15 minutes.
 - JPG, PNG et WebP uniquement, maximum 20 Mo par photo, 500 photos par album. Les signatures de fichiers sont contrôlées côté serveur.
 - L’optimisation se fait localement dans le navigateur, une photo à la fois. Elle remplace la version hébergée et retire les métadonnées EXIF ; conserver les originaux sur son ordinateur. Un WebP existant n’est remplacé que si le résultat est plus petit.

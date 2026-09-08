@@ -15,6 +15,13 @@
       "when": 1788878088877,
       "tag": "0001_square_devos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788879330125,
+      "tag": "0002_dashing_kate_bishop",
+      "breakpoints": true
     }
   ]
 }
