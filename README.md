@@ -20,7 +20,7 @@ Le dossier `github-pages/` est aussi un export prêt à publier, avec chemins re
 - Le code Admin est défini exclusivement dans le secret serveur `ADMIN_CODE`, jamais dans le JavaScript public. Il peut être changé via les variables d’environnement Sites, suivi d’une publication.
 - Les sessions administrateur et visiteur aléatoires expirent après 12 heures. Le code visiteur à 4 chiffres est salé et haché côté serveur ; les images et les données de l’album restent inaccessibles sans session valide quand le verrou est actif. Le jeton reste en mémoire dans l’onglet ; recharger la page exige de se reconnecter. Déconnexion révoque la session côté serveur.
 - Limitation de connexion : 10 tentatives par IP et fenêtre de 15 minutes.
-- JPG, PNG et WebP uniquement, maximum 20 Mo par photo, 500 photos par album. Les signatures de fichiers sont contrôlées côté serveur.
+- JPG, PNG et WebP uniquement, maximum 50 Mo à sélectionner. Le navigateur les convertit automatiquement en WebP avant l’envoi pour rester compatibles avec l’hébergement. Les signatures de fichiers sont contrôlées côté serveur.
 - L’optimisation se fait localement dans le navigateur, une photo à la fois. Elle remplace la version hébergée et retire les métadonnées EXIF ; conserver les originaux sur son ordinateur. Un WebP existant n’est remplacé que si le résultat est plus petit.
 - Le code protège la modification, pas la consultation des images. L’album est accessible aux visiteurs du site.
 - Aucun ajout en base n’est fait pour les photos de démonstration. Elles disparaissent à l’ajout de la première vraie photo. Un album vidé reste vide.
