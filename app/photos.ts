@@ -1,13 +1,11 @@
 export const demoFolders=[
-  {id:'demo-cote',name:'Côte italienne',position:0},
-  {id:'demo-alpes',name:'Les Alpes',position:1},
-  {id:'demo-escapades',name:'Escapades',position:2},
+  {id:'demo-biarritz',name:'Biarritz · été 2026',position:0},
+  {id:'demo-espagne',name:'Espagne · escapade',position:1},
+  {id:'demo-alpes',name:'Les Alpes · hiver',position:2},
 ];
+const placeholder=(folderId:string,entries:string[])=>entries.map((name,index)=>({id:`${folderId}-${index+1}`,name,url:`https://picsum.photos/seed/${folderId}-${index+1}/1600/1100`,size:560000+index*12000,type:'image/jpeg',folderId}));
 export const demoPhotos=[
-  {id:'demo-positano',name:'Les couleurs de la côte',url:'photos/positano.jpg',size:710332,type:'image/jpeg',folderId:'demo-cote'},
-  {id:'demo-alpine-lake',name:'Au calme, au bord du lac',url:'photos/alpine-lake.jpg',size:518705,type:'image/jpeg',folderId:'demo-alpes'},
-  {id:'demo-italian-street',name:'Se perdre un peu',url:'photos/italian-street.jpg',size:638081,type:'image/jpeg',folderId:'demo-escapades'},
-  {id:'demo-palm-beach',name:'Les pieds dans le sable',url:'photos/palm-beach.jpg',size:481865,type:'image/jpeg',folderId:'demo-escapades'},
-  {id:'demo-mountain-reflection',name:'Là-haut, tout ralentit',url:'photos/mountain-reflection.jpg',size:745070,type:'image/jpeg',folderId:'demo-alpes'},
-  {id:'demo-coastal-village',name:'Une dernière lumière',url:'photos/coastal-village.jpg',size:453203,type:'image/jpeg',folderId:'demo-cote'},
+  ...placeholder('demo-biarritz',['Premier bain de soleil','La grande plage','Entre deux vagues','Les cabanes colorées','Le phare au loin','Un peu de vent','Fin de journée sur la côte','Les pieds dans le sable','Un café face à l’océan','La promenade du soir','L’océan sans filtre','Dernières lumières']),
+  ...placeholder('demo-espagne',['Matin à Séville','Une rue qui danse','Les oranges du marché','À l’ombre des façades','Pause tapas','Le bleu de l’après-midi','Un balcon fleuri','Une table pour deux','L’heure dorée','Place encore calme','Un détour par hasard','Le voyage continue']),
+  ...placeholder('demo-alpes',['Le départ du refuge','Silence sur le lac','Premier sommet','L’air est plus frais ici','Chemin de traverse','Une pause en altitude','Neige sur les crêtes','Le petit chalet','Vue à couper le souffle','La vallée sous nos pieds','Retour à la lumière','Dernier regard avant de partir']),
 ];
