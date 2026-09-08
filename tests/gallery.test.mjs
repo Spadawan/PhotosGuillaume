@@ -1,0 +1,44 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFile,mkdir,writeFile} from 'node:fs/promises';
+import ts from 'typescript';
+const database=new DatabaseSync(':memory:');
+database.exec(await readFile(new URL('../drizzle/0000_puzzling_lorna_dane.sql',import.meta.url),'utf8'));
+database.exec(await readFile(new URL('../drizzle/0001_square_devos.sql',import.meta.url),'utf8'));
+const db={prepare(sql){let args=[];const statement=database.prepare(sql);const p={bind(...values){args=values;return p},async first(){return statement.get(...args)||null},async all(){return {results:statement.all(...args)}},async run(){return {meta:{changes:Number(statement.run(...args).changes)}}}};return p},async batch(items){database.exec('BEGIN');try{const values=[];for(const i of items)values.push(await i.run());database.exec('COMMIT');return values}catch(e){database.exec('ROLLBACK');throw e}}};
+const objects=new Map();const bucket={async put(key,stream){objects.set(key,await new Response(stream).arrayBuffer())},async get(key){const b=objects.get(key);return b?{size:b.byteLength,body:b}:null},async delete(key){objects.delete(key)}};
+globalThis.__galleryTest={db,bucket};
+const source=(await readFile(new URL('../app/api/gallery/route.ts',import.meta.url),'utf8')).replace("import {galleryDb,galleryBucket,config} from '@/lib/gallery-db';",`const galleryDb=()=>globalThis.__galleryTest.db;const galleryBucket=()=>globalThis.__galleryTest.bucket;const config=()=>({ADMIN_CODE:'test-code',PUBLIC_ORIGIN:'https://album.test',ALLOWED_ORIGIN:'https://spadawan.github.io'});`);
+await mkdir(new URL('../.sites-runtime/test/',import.meta.url),{recursive:true});
+const target=new URL('../.sites-runtime/test/gallery.mjs',import.meta.url);
+await writeFile(target,ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);
+const {GET,POST,OPTIONS}=await import(target.href);
+let token='';
+function request(action,body,authenticated=true,extra={}){return new Request('https://album.test/api/gallery?action='+action,{method:'POST',headers:{...(authenticated?{Authorization:'Bearer '+token}:{}),...extra},body:body instanceof FormData?body:JSON.stringify(body)})}
+function uploadForm(){const f=new FormData();f.append('file',new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/wAAAABJRU5ErkJggg==','base64')],{type:'image/png'}),'souvenir.png');return f}
+test('Shared album lifecycle and admin authorization',async()=>{
+assert.equal((await POST(request('delete',{id:'x'},false))).status,401);
+assert.equal((await POST(request('login',{code:'bad'},false))).status,401);
+const login=await POST(request('login',{code:'test-code'},false));assert.equal(login.status,200);token=(await login.json()).token;
+const initial=await (await GET(new Request('https://album.test/api/gallery'))).json();assert.equal(initial.initialized,false);assert.deepEqual(initial.folders,[]);
+const created=await POST(request('folder-create',{name:'Biarritz'}));assert.equal(created.status,200);const folderId=(await created.json()).id;
+assert.equal((await POST(request('folder-rename',{id:folderId,name:'Espagne'}))).status,200);
+const firstForm=uploadForm();firstForm.append('folderId',folderId);const a=await POST(request('upload',firstForm));assert.equal(a.status,200);const id1=(await a.json()).id;
+const b=await POST(request('upload',uploadForm()));assert.equal(b.status,200);const id2=(await b.json()).id;
+const album=await (await GET(new Request('https://album.test/api/gallery'))).json();assert.equal(album.initialized,true);assert.equal(album.folders[0].name,'Espagne');assert.equal(album.photos.find(p=>p.id===id1).folderId,folderId);
+assert.equal((await POST(request('photo-folder',{id:id1,folderId:null}))).status,200);
+assert.equal((await POST(request('reorder',{ids:[id2,id1],folderId:null}))).status,200);
+const reordered=await (await GET(new Request('https://album.test/api/gallery'))).json();assert.deepEqual(reordered.photos.map(p=>p.id),[id2,id1]);
+const image=await GET(new Request(album.photos[0].url));assert.equal(image.headers.get('Content-Type'),'image/png');assert.ok((await image.arrayBuffer()).byteLength);
+const f=uploadForm();f.append('id',id1);assert.equal((await POST(request('replace',f))).status,200);assert.equal(objects.size,2);
+assert.equal((await POST(request('reorder',{ids:[id1,id1],folderId:null}))).status,400);
+const invalid=new FormData();invalid.append('file',new Blob(['<script>bad</script>'],{type:'image/png'}),'fake.png');assert.equal((await POST(request('upload',invalid))).status,400);
+assert.equal((await POST(request('delete',{id:id1},true,{Origin:'https://evil.test'}))).status,403);
+assert.equal((await OPTIONS(new Request('https://album.test/api/gallery',{headers:{Origin:'https://spadawan.github.io'}}))).headers.get('Access-Control-Allow-Origin'),'https://spadawan.github.io');
+assert.equal((await POST(request('folder-delete',{id:folderId}))).status,200);
+await POST(request('delete',{id:id1}));await POST(request('delete',{id:id2}));assert.equal(objects.size,0);
+const empty=await (await GET(new Request('https://album.test/api/gallery'))).json();assert.equal(empty.initialized,true);assert.equal(empty.photos.length,0);
+await POST(request('logout',{}));assert.equal((await POST(request('delete',{id:id1}))).status,401);
+});
+test('Repeated incorrect codes are rate limited',async()=>{let response;for(let i=0;i<11;i++)response=await POST(request('login',{code:'bad'},false,{'cf-connecting-ip':'192.0.2.1'}));assert.equal(response.status,429)});
