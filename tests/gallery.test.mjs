@@ -28,6 +28,8 @@ assert.equal((await POST(request('folder-rename',{id:folderId,name:'Espagne'})))
 const firstForm=uploadForm();firstForm.append('folderId',folderId);const a=await POST(request('upload',firstForm));assert.equal(a.status,200);const id1=(await a.json()).id;
 const b=await POST(request('upload',uploadForm()));assert.equal(b.status,200);const id2=(await b.json()).id;
 const album=await (await GET(new Request('https://album.test/api/gallery'))).json();assert.equal(album.initialized,true);assert.equal(album.folders[0].name,'Espagne');assert.equal(album.photos.find(p=>p.id===id1).folderId,folderId);
+assert.equal((await POST(request('photo-rename',{id:id1,name:'Coucher de soleil'}))).status,200);
+const renamed=await (await GET(new Request('https://album.test/api/gallery'))).json();assert.equal(renamed.photos.find(p=>p.id===id1).name,'Coucher de soleil');
 assert.equal((await POST(request('photo-folder',{id:id1,folderId:null}))).status,200);
 assert.equal((await POST(request('reorder',{ids:[id2,id1],folderId:null}))).status,200);
 const reordered=await (await GET(new Request('https://album.test/api/gallery'))).json();assert.deepEqual(reordered.photos.map(p=>p.id),[id2,id1]);

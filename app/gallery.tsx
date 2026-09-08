@@ -1,6 +1,6 @@
 'use client';
 import {useState,useEffect,useRef,useCallback} from 'react';
-import {Camera,Play,Pause,ArrowUpRight,LockKeyhole,ArrowLeft,ArrowRight,ArrowUp,ArrowDown,Upload,Trash2,Sparkles,ZoomIn,ZoomOut,X,Maximize,LogOut,Heart,FolderPlus,Folder,Check,Pencil} from 'lucide-react';
+import {Camera,Play,Pause,ArrowUpRight,LockKeyhole,ArrowLeft,ArrowRight,ArrowUp,ArrowDown,Upload,Trash2,Sparkles,ZoomIn,ZoomOut,X,Maximize,LogOut,Heart,FolderPlus,Folder,Check,Pencil,GripVertical} from 'lucide-react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import {Switch} from '@/components/ui/switch';
 import {AlertDialog,AlertDialogContent,AlertDialogHeader,AlertDialogTitle,AlertDialogDescription,AlertDialogFooter,AlertDialogCancel,AlertDialogAction} from '@/components/ui/alert-dialog';
@@ -18,6 +18,7 @@ export default function Gallery(){
   const [admin,setAdmin]=useState(false),[token,setToken]=useState(''),[code,setCode]=useState(''),[busy,setBusy]=useState(false),[progress,setProgress]=useState(''),[remove,setRemove]=useState<Photo|null>(null);
   const [accessMode,setAccessMode]=useState<'checking'|'open'|'locked'>('checking'),[accessToken,setAccessToken]=useState(''),[visitorCode,setVisitorCode]=useState(''),[visitorBusy,setVisitorBusy]=useState(false),[accessEnabled,setAccessEnabled]=useState(false),[newAccessCode,setNewAccessCode]=useState('');
   const [adminFolder,setAdminFolder]=useState<string>(''),[newFolder,setNewFolder]=useState(''),[editing,setEditing]=useState<string|null>(null),[editingName,setEditingName]=useState(''),[removeFolder,setRemoveFolder]=useState<FolderItem|null>(null);
+  const [editingPhoto,setEditingPhoto]=useState<string|null>(null),[photoTitle,setPhotoTitle]=useState(''),[draggingPhoto,setDraggingPhoto]=useState<string|null>(null);
   const fileInput=useRef<HTMLInputElement>(null),touch=useRef(0),viewer=useRef<HTMLDivElement>(null);
   const visible=folder==='all'?photos:photos.filter(p=>p.folderId===folder);
   const managed=photos.filter(p=>(p.folderId||'')===adminFolder);
@@ -38,14 +39,226 @@ export default function Gallery(){
   async function renameFolder(id:string){if(!editingName.trim())return;setBusy(true);try{await request('folder-rename',JSON.stringify({id,name:editingName}));await load(accessToken);setEditing(null);toast.success('Dossier renommé')}catch(e){toast.error((e as Error).message)}finally{setBusy(false)}}
   async function deleteFolder(){if(!removeFolder)return;setBusy(true);try{await request('folder-delete',JSON.stringify({id:removeFolder.id}));await load(accessToken);setAdminFolder('');toast.success('Dossier supprimé · ses photos sont maintenant sans dossier')}catch(e){toast.error((e as Error).message)}finally{setBusy(false);setRemoveFolder(null)}}
   async function changePhotoFolder(id:string,folderId:string){setBusy(true);try{await request('photo-folder',JSON.stringify({id,folderId:folderId||null}));await load(accessToken);toast.success('Photo déplacée')}catch(e){toast.error((e as Error).message)}finally{setBusy(false)}}
+  async function renamePhoto(id:string){if(!photoTitle.trim())return;setBusy(true);try{await request('photo-rename',JSON.stringify({id,name:photoTitle}));await load(accessToken);setEditingPhoto(null);toast.success('Titre enregistré')}catch(e){toast.error((e as Error).message)}finally{setBusy(false)}}
+  async function dropPhoto(target:number){if(!draggingPhoto)return;const source=managed.findIndex(p=>p.id===draggingPhoto);setDraggingPhoto(null);if(source<0||source===target)return;const list=[...managed],moved=list.splice(source,1)[0];list.splice(target,0,moved);setBusy(true);try{await request('reorder',JSON.stringify({ids:list.map(p=>p.id),folderId:adminFolder||null}));await load(accessToken);toast.success('Nouvel ordre enregistré')}catch(e){toast.error((e as Error).message)}finally{setBusy(false)}}
   async function deletePhoto(){if(!remove)return;setBusy(true);try{await request('delete',JSON.stringify({id:remove.id}));await load(accessToken);toast.success('Photo supprimée')}catch(e){toast.error((e as Error).message)}finally{setBusy(false);setRemove(null)}}
   async function optimize(){setBusy(true);let saved=0;try{for(let i=0;i<photos.length;i++){const p=photos[i];setProgress(`Optimisation ${i+1}/${photos.length} · ${p.name}`);const res=await fetch(p.url);if(!res.ok)throw Error('Impossible de lire '+p.name);const blob=await res.blob(),bitmap=await createImageBitmap(blob);if(bitmap.width*bitmap.height>100e6){bitmap.close();throw Error('Image trop grande : '+p.name)}const scale=Math.min(1,2560/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const webp=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/webp',.8));canvas.width=canvas.height=1;if(!webp||webp.type!=='image/webp')throw Error('Votre navigateur ne prend pas en charge la conversion WebP.');if(webp.size>=p.size&&p.type==='image/webp')continue;const data=new FormData();data.append('file',webp,p.name.replace(/\.[^.]+$/,'')+'.webp');data.append('id',p.id);await request('replace',data);saved+=Math.max(0,p.size-webp.size)}toast.success('Photos optimisées en WebP · '+size(saved)+' économisés')}catch(e){toast.error((e as Error).message)}finally{await load(accessToken);setProgress('');setBusy(false)}}
   async function fullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await viewer.current?.requestFullscreen()}catch{toast.error('Le plein écran n’est pas disponible sur ce navigateur.')}}
-  if(accessMode==='checking')return <div className="access-screen"><Camera/><p>Ouverture du carnet…</p></div>;
-  if(accessMode==='locked')return <><Toaster position="bottom-center" richColors/><main className="access-screen"><div className="access-card"><span className="brand-icon"><LockKeyhole/></span><p className="eyebrow">Le carnet de Guillaume</p><h1>Un espace <em>privé.</em></h1><p>Entrez le code à 4 chiffres pour retrouver les souvenirs.</p><form className="login" onSubmit={unlock}><input aria-label="Code d’accès à 4 chiffres" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="one-time-code" value={visitorCode} onChange={e=>setVisitorCode(e.target.value.replace(/\D/g,''))} autoFocus required/><button className="pill dark" disabled={visitorBusy||visitorCode.length!==4}>{visitorBusy?'Vérification…':'Accéder au carnet'}</button></form></div></main></>;
-  return <><Toaster position="bottom-center" richColors/><div className="shell"><header className="topbar"><div className="brand"><span className="brand-icon"><Camera/></span>Les échappées<span style={{fontWeight:400,color:'#879087'}}>.</span></div><button className="quiet" onClick={()=>setAdmin(true)}><LockKeyhole size={14}/>Admin</button></header><main><section className="intro"><div><p className="eyebrow">Le carnet photo de Guillaume</p><h1>Un peu d’ailleurs.<br/><em>Beaucoup de souvenirs.</em></h1><p className="intro-sub">Des instants à retrouver, ensemble.</p></div><button className="pill dark" disabled={!visible.length} onClick={()=>{setIndex(0);setPlaying(true);setZoom(false)}}><Play size={16} fill="currentColor"/>Lancer le diaporama</button></section>{folders.length>0&&<nav className="folder-tabs" aria-label="Destinations"><button className={'folder-tab '+(folder==='all'?'active':'')} onClick={()=>setFolder('all')}>Tous les souvenirs</button>{folders.map(f=><button key={f.id} className={'folder-tab '+(folder===f.id?'active':'')} onClick={()=>setFolder(f.id)}>{f.name}</button>)}</nav>}<div className="toolbar"><strong>{folder==='all'?'Au fil du voyage':folders.find(f=>f.id===folder)?.name} <span style={{color:'#8b948e',marginLeft:10}}>{loading?'…':String(visible.length).padStart(2,'0')}</span></strong><span>{demo?'Photos de démonstration':'L’album de famille'}</span></div>{error?<div className="notice error" role="alert">{error} <button className="quiet" onClick={()=>load(accessToken)}>Réessayer</button></div>:loading?<div className="empty" role="status">Ouverture de l’album…</div>:visible.length?<div className="gallery">{visible.map((p,i)=><button className="photo" key={p.id} onClick={()=>{setIndex(i);setPlaying(false);setZoom(false)}} aria-label={'Ouvrir '+p.name}><img src={p.url} alt={p.name} loading={i<2?'eager':'lazy'}/><span className="photo-caption"><span><small>{String(i+1).padStart(2,'0')} / {String(visible.length).padStart(2,'0')}</small><b>{p.name.replace(/\.[^.]+$/,'')}</b></span><span className="expand"><ArrowUpRight/></span></span></button>)}</div>:<div className="empty"><Folder style={{margin:'auto'}}/><h2>Ce dossier attend ses souvenirs.</h2><p>Les photos ajoutées ici apparaîtront pour toute la famille.</p></div>}</main><footer className="footer"><span><Heart size={14}/>Les beaux moments se partagent.</span><span>Le carnet de Guillaume</span></footer></div>
-  <Dialog open={index!==null} onOpenChange={o=>{if(!o){setIndex(null);setPlaying(false);setZoom(false)}}}><DialogContent className="viewer" showCloseButton={false} ref={viewer}>{index!==null&&visible[index]&&<><div className="viewer-bar"><div><DialogTitle className="viewer-title">{visible[index].name.replace(/\.[^.]+$/,'')}</DialogTitle><DialogDescription className="sr-only">Visionneuse. Utilisez les flèches pour changer de photo et Échap pour fermer.</DialogDescription><small>{index+1} / {visible.length}</small></div><div className="viewer-actions"><button className={'icon-button '+(playing?'active':'')} aria-label={playing?'Mettre en pause':'Lancer le diaporama'} onClick={()=>{setPlaying(!playing);setZoom(false)}}>{playing?<Pause/>:<Play/>}</button><button className="icon-button" aria-label={zoom?'Dézoomer':'Zoomer'} onClick={()=>{setZoom(!zoom);setPlaying(false)}}>{zoom?<ZoomOut/>:<ZoomIn/>}</button><button className="icon-button" aria-label="Plein écran" onClick={fullscreen}><Maximize/></button><button className="icon-button" aria-label="Fermer" onClick={()=>{setIndex(null);setPlaying(false)}}><X/></button></div></div><div className={'image-stage '+(zoom?'zoomed':'')} onTouchStart={e=>touch.current=e.touches[0].clientX} onTouchEnd={e=>{if(zoom)return;const d=e.changedTouches[0].clientX-touch.current;if(Math.abs(d)>60)next(d<0?1:-1)}}><img key={visible[index].id} className="hero-image" src={visible[index].url} alt={visible[index].name} onClick={()=>{setZoom(!zoom);setPlaying(false)}}/>{!zoom&&visible.length>1&&<><button className="icon-button nav-arrow prev" aria-label="Photo précédente" onClick={()=>next(-1)}><ArrowLeft/></button><button className="icon-button nav-arrow next" aria-label="Photo suivante" onClick={()=>next(1)}><ArrowRight/></button></>}</div><div className="filmstrip">{visible.map((p,i)=><button key={p.id} className={'thumb '+(i===index?'selected':'')} aria-label={'Voir '+p.name} aria-current={i===index?'true':undefined} onClick={()=>{setIndex(i);setZoom(false)}}><img src={p.url} alt=""/></button>)}</div></>}</DialogContent></Dialog>
-  <Dialog open={admin} onOpenChange={o=>{if(!busy)setAdmin(o)}}><DialogContent className="admin-dialog"><DialogTitle className="dialog-heading">{token?'Votre carnet, vos souvenirs.':'L’espace de Guillaume'}</DialogTitle><DialogDescription>{token?'Créez vos destinations, ajoutez et organisez leurs photos.':'Entrez votre code pour gérer les photos.'}</DialogDescription>{!token?<form className="login" onSubmit={login}><label htmlFor="code">Code d’accès</label><input id="code" type="password" autoComplete="current-password" value={code} onChange={e=>setCode(e.target.value)} required autoFocus/><button className="pill dark" disabled={busy}>{busy?'Connexion…':'Ouvrir mon album'}</button></form>:<><section className="access-manager"><div><h3>Accès au site</h3><p>Demander un code à 4 chiffres avant d’ouvrir le carnet.</p></div><Switch checked={accessEnabled} disabled={busy} onCheckedChange={checked=>{if(checked)setAccessEnabled(true);else saveAccess(false)}} aria-label="Activer le code d’accès"/></section>{accessEnabled&&<div className="access-code-admin"><input inputMode="numeric" pattern="[0-9]{4}" maxLength={4} placeholder="Nouveau code à 4 chiffres" value={newAccessCode} onChange={e=>setNewAccessCode(e.target.value.replace(/\D/g,''))}/><button className="pill dark" disabled={busy||newAccessCode.length!==4} onClick={()=>saveAccess(true)}>Enregistrer le code</button></div>}<section className="folder-manager"><h3>Les dossiers</h3><form className="folder-create" onSubmit={createFolder}><input value={newFolder} onChange={e=>setNewFolder(e.target.value)} placeholder="Ex. Biarritz, Espagne…" maxLength={80}/><button className="pill dark" disabled={busy||!newFolder.trim()}><FolderPlus/>Créer</button></form><div className="folder-list">{folders.map((f,i)=><div className="folder-row" key={f.id}>{editing===f.id?<><input className="folder-name" value={editingName} onChange={e=>setEditingName(e.target.value)} autoFocus maxLength={80}/><button className="icon-button" aria-label="Valider" disabled={busy} onClick={()=>renameFolder(f.id)}><Check/></button></>:<><button className="quiet folder-name" onClick={()=>setAdminFolder(f.id)}><Folder/>{f.name}</button><span className="folder-count">{photos.filter(p=>p.folderId===f.id).length} photo(s)</span><button className="icon-button" aria-label={'Renommer '+f.name} onClick={()=>{setEditing(f.id);setEditingName(f.name)}}><Pencil/></button></>}<button className="icon-button" aria-label={'Monter '+f.name} disabled={busy||i===0} onClick={()=>moveFolder(i,-1)}><ArrowUp/></button><button className="icon-button" aria-label={'Descendre '+f.name} disabled={busy||i===folders.length-1} onClick={()=>moveFolder(i,1)}><ArrowDown/></button><button className="icon-button delete" aria-label={'Supprimer '+f.name} disabled={busy} onClick={()=>setRemoveFolder(f)}><Trash2/></button></div>)}{!folders.length&&<p style={{color:'#69716c'}}>Créez votre premier dossier pour classer le voyage.</p>}</div></section><div className="admin-actions"><button className="pill" disabled={busy||demo||!photos.length} onClick={optimize}><Sparkles/>Optimiser pour le web</button><span style={{fontSize:13,color:'#69716c'}}>WebP · qualité 80 % · 2 560 px max.</span><button className="quiet" disabled={busy} onClick={async()=>{try{await request('logout');setToken('')}catch(e){toast.error((e as Error).message)}}}><LogOut/>Déconnexion</button></div><div className="admin-filter"><label htmlFor="destination"><b>Photos du dossier</b></label><select id="destination" value={adminFolder} onChange={e=>setAdminFolder(e.target.value)}><option value="">Sans dossier</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></div><input ref={fileInput} type="file" multiple accept="image/jpeg,image/png,image/webp" hidden onChange={e=>upload(e.target.files)}/><button className="upload-zone" disabled={busy} onClick={()=>fileInput.current?.click()} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();upload(e.dataTransfer.files)}}><Upload/><div><b>Ajouter dans {folders.find(f=>f.id===adminFolder)?.name||'Sans dossier'}</b><p>Déposez ici ou cliquez · JPG, PNG, WebP · compression WebP automatique</p></div></button>{progress&&<div className="notice" role="status">{progress}</div>}{demo?<p className="notice">Les dossiers et photos visibles sont des exemples. Votre premier ajout commencera le véritable album.</p>:<><p style={{fontSize:14,color:'#69716c'}}>{managed.length} photo(s) · Réorganisez-les ou déplacez-les vers un autre dossier.</p>{managed.map((p,i)=><div className="admin-row" key={p.id}><img src={p.url} alt=""/><div className="row-title"><b>{p.name}</b><small>{size(p.size)} · {p.type.replace('image/','').toUpperCase()}</small></div><select aria-label={'Dossier de '+p.name} value={p.folderId||''} onChange={e=>changePhotoFolder(p.id,e.target.value)} disabled={busy}><option value="">Sans dossier</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select><div className="row-actions"><button className="icon-button" aria-label={'Monter '+p.name} disabled={busy||i===0} onClick={()=>movePhoto(i,-1)}><ArrowUp/></button><button className="icon-button" aria-label={'Descendre '+p.name} disabled={busy||i===managed.length-1} onClick={()=>movePhoto(i,1)}><ArrowDown/></button><button className="icon-button delete" aria-label={'Supprimer '+p.name} disabled={busy} onClick={()=>setRemove(p)}><Trash2/></button></div></div>)}</>}</>}</DialogContent></Dialog>
-  <AlertDialog open={!!remove} onOpenChange={o=>!o&&setRemove(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Supprimer cette photo ?</AlertDialogTitle><AlertDialogDescription>« {remove?.name} » sera retirée de l’album pour tous les visiteurs. Cette action est définitive.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Annuler</AlertDialogCancel><AlertDialogAction onClick={deletePhoto}>Supprimer</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-  <AlertDialog open={!!removeFolder} onOpenChange={o=>!o&&setRemoveFolder(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Supprimer le dossier « {removeFolder?.name} » ?</AlertDialogTitle><AlertDialogDescription>Les photos seront conservées et déplacées dans « Sans dossier ».</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Annuler</AlertDialogCancel><AlertDialogAction onClick={deleteFolder}>Supprimer le dossier</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></>;
+  if(accessMode==='checking')return <div className="access-screen">
+<Camera/>
+<p>Ouverture du carnet…</p>
+</div>;
+  if(accessMode==='locked')return <>
+<Toaster position="bottom-center" richColors/>
+<main className="access-screen">
+<div className="access-card">
+<span className="brand-icon">
+<LockKeyhole/>
+</span>
+<p className="eyebrow">Le carnet de Guillaume</p>
+<h1>Un espace <em>privé.</em>
+</h1>
+<p>Entrez le code à 4 chiffres pour retrouver les souvenirs.</p>
+<form className="login" onSubmit={unlock}>
+<input aria-label="Code d’accès à 4 chiffres" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} autoComplete="one-time-code" value={visitorCode} onChange={e=>setVisitorCode(e.target.value.replace(/\D/g,''))} autoFocus required/>
+<button className="pill dark" disabled={visitorBusy||visitorCode.length!==4}>{visitorBusy?'Vérification…':'Accéder au carnet'}</button>
+</form>
+</div>
+</main>
+</>;
+  return <>
+<Toaster position="bottom-center" richColors/>
+<div className="shell">
+<header className="topbar">
+<div className="brand">
+<span className="brand-icon">
+<Camera/>
+</span>Les échappées<span style={{fontWeight:400,color:'#879087'}}>.</span>
+</div>
+<button className="quiet" onClick={()=>setAdmin(true)}>
+<LockKeyhole size={14}/>Admin</button>
+</header>
+<main>
+<section className="intro">
+<div>
+<p className="eyebrow">Le carnet photo de Guillaume</p>
+<h1>Un peu d’ailleurs.<br/>
+<em>Beaucoup de souvenirs.</em>
+</h1>
+<p className="intro-sub">Des instants à retrouver, ensemble.</p>
+</div>
+<button className="pill dark" disabled={!visible.length} onClick={()=>{setIndex(0);setPlaying(true);setZoom(false)}}>
+<Play size={16} fill="currentColor"/>Lancer le diaporama</button>
+</section>{folders.length>0&&<nav className="folder-tabs" aria-label="Destinations">
+<button className={'folder-tab '+(folder==='all'?'active':'')} onClick={()=>setFolder('all')}>Tous les souvenirs</button>{folders.map(f=>
+<button key={f.id} className={'folder-tab '+(folder===f.id?'active':'')} onClick={()=>setFolder(f.id)}>{f.name}</button>)}</nav>}<div className="toolbar">
+<strong>{folder==='all'?'Au fil du voyage':folders.find(f=>f.id===folder)?.name} <span style={{color:'#8b948e',marginLeft:10}}>{loading?'…':String(visible.length).padStart(2,'0')}</span>
+</strong>
+<span>{demo?'Photos de démonstration':'L’album de famille'}</span>
+</div>{error?<div className="notice error" role="alert">{error} <button className="quiet" onClick={()=>load(accessToken)}>Réessayer</button>
+</div>:loading?<div className="empty" role="status">Ouverture de l’album…</div>:visible.length?<div className="gallery">{visible.map((p,i)=>
+<button className="photo" key={p.id} onClick={()=>{setIndex(i);setPlaying(false);setZoom(false)}} aria-label={'Ouvrir '+p.name}>
+<img src={p.url} alt={p.name} loading={i<2?'eager':'lazy'}/>
+<span className="photo-caption">
+<span>
+<small>{String(i+1).padStart(2,'0')} / {String(visible.length).padStart(2,'0')}</small>
+<b>{p.name.replace(/\.[^.]+$/,'')}</b>
+</span>
+<span className="expand">
+<ArrowUpRight/>
+</span>
+</span>
+</button>)}</div>:<div className="empty">
+<Folder style={{margin:'auto'}}/>
+<h2>Ce dossier attend ses souvenirs.</h2>
+<p>Les photos ajoutées ici apparaîtront pour toute la famille.</p>
+</div>}</main>
+<footer className="footer">
+<span>
+<Heart size={14}/>Les beaux moments se partagent.</span>
+<span>Le carnet de Guillaume</span>
+</footer>
+</div>
+  <Dialog open={index!==null} onOpenChange={o=>{if(!o){setIndex(null);setPlaying(false);setZoom(false)}}}>
+<DialogContent className="viewer" showCloseButton={false} ref={viewer}>{index!==null&&visible[index]&&<>
+<div className="viewer-bar">
+<div>
+<DialogTitle className="viewer-title">{visible[index].name.replace(/\.[^.]+$/,'')}</DialogTitle>
+<DialogDescription className="sr-only">Visionneuse. Utilisez les flèches pour changer de photo et Échap pour fermer.</DialogDescription>
+<small>{index+1} / {visible.length}</small>
+</div>
+<div className="viewer-actions">
+<button className={'icon-button '+(playing?'active':'')} aria-label={playing?'Mettre en pause':'Lancer le diaporama'} onClick={()=>{setPlaying(!playing);setZoom(false)}}>{playing?<Pause/>:<Play/>}</button>
+<button className="icon-button" aria-label={zoom?'Dézoomer':'Zoomer'} onClick={()=>{setZoom(!zoom);setPlaying(false)}}>{zoom?<ZoomOut/>:<ZoomIn/>}</button>
+<button className="icon-button" aria-label="Plein écran" onClick={fullscreen}>
+<Maximize/>
+</button>
+<button className="icon-button" aria-label="Fermer" onClick={()=>{setIndex(null);setPlaying(false)}}>
+<X/>
+</button>
+</div>
+</div>
+<div className={'image-stage '+(zoom?'zoomed':'')} onTouchStart={e=>touch.current=e.touches[0].clientX} onTouchEnd={e=>{if(zoom)return;const d=e.changedTouches[0].clientX-touch.current;if(Math.abs(d)>60)next(d<0?1:-1)}}>
+<img key={visible[index].id} className="hero-image" src={visible[index].url} alt={visible[index].name} onClick={()=>{setZoom(!zoom);setPlaying(false)}}/>{!zoom&&visible.length>1&&<>
+<button className="icon-button nav-arrow prev" aria-label="Photo précédente" onClick={()=>next(-1)}>
+<ArrowLeft/>
+</button>
+<button className="icon-button nav-arrow next" aria-label="Photo suivante" onClick={()=>next(1)}>
+<ArrowRight/>
+</button>
+</>}</div>
+<div className="filmstrip">{visible.map((p,i)=>
+<button key={p.id} className={'thumb '+(i===index?'selected':'')} aria-label={'Voir '+p.name} aria-current={i===index?'true':undefined} onClick={()=>{setIndex(i);setZoom(false)}}>
+<img src={p.url} alt=""/>
+</button>)}</div>
+</>}</DialogContent>
+</Dialog>
+  <Dialog open={admin} onOpenChange={o=>{if(!busy)setAdmin(o)}}>
+<DialogContent className="admin-dialog">
+<DialogTitle className="dialog-heading">{token?'Votre carnet, vos souvenirs.':'L’espace de Guillaume'}</DialogTitle>
+<DialogDescription>{token?'Créez vos destinations, ajoutez et organisez leurs photos.':'Entrez votre code pour gérer les photos.'}</DialogDescription>{!token?<form className="login" onSubmit={login}>
+<label htmlFor="code">Code d’accès</label>
+<input id="code" type="password" autoComplete="current-password" value={code} onChange={e=>setCode(e.target.value)} required autoFocus/>
+<button className="pill dark" disabled={busy}>{busy?'Connexion…':'Ouvrir mon album'}</button>
+</form>:<>
+<section className="access-manager">
+<div>
+<h3>Accès au site</h3>
+<p>Demander un code à 4 chiffres avant d’ouvrir le carnet.</p>
+</div>
+<Switch checked={accessEnabled} disabled={busy} onCheckedChange={checked=>{if(checked)setAccessEnabled(true);else saveAccess(false)}} aria-label="Activer le code d’accès"/>
+</section>{accessEnabled&&<div className="access-code-admin">
+<input inputMode="numeric" pattern="[0-9]{4}" maxLength={4} placeholder="Nouveau code à 4 chiffres" value={newAccessCode} onChange={e=>setNewAccessCode(e.target.value.replace(/\D/g,''))}/>
+<button className="pill dark" disabled={busy||newAccessCode.length!==4} onClick={()=>saveAccess(true)}>Enregistrer le code</button>
+</div>}<section className="folder-manager">
+<h3>Les dossiers</h3>
+<form className="folder-create" onSubmit={createFolder}>
+<input value={newFolder} onChange={e=>setNewFolder(e.target.value)} placeholder="Ex. Biarritz, Espagne…" maxLength={80}/>
+<button className="pill dark" disabled={busy||!newFolder.trim()}>
+<FolderPlus/>Créer</button>
+</form>
+<div className="folder-list">{folders.map((f,i)=>
+<div className="folder-row" key={f.id}>{editing===f.id?<>
+<input className="folder-name" value={editingName} onChange={e=>setEditingName(e.target.value)} autoFocus maxLength={80}/>
+<button className="icon-button" aria-label="Valider" disabled={busy} onClick={()=>renameFolder(f.id)}>
+<Check/>
+</button>
+</>:<>
+<button className="quiet folder-name" onClick={()=>setAdminFolder(f.id)}>
+<Folder/>{f.name}</button>
+<span className="folder-count">{photos.filter(p=>p.folderId===f.id).length} photo(s)</span>
+<button className="icon-button" aria-label={'Renommer '+f.name} onClick={()=>{setEditing(f.id);setEditingName(f.name)}}>
+<Pencil/>
+</button>
+</>}<button className="icon-button" aria-label={'Monter '+f.name} disabled={busy||i===0} onClick={()=>moveFolder(i,-1)}>
+<ArrowUp/>
+</button>
+<button className="icon-button" aria-label={'Descendre '+f.name} disabled={busy||i===folders.length-1} onClick={()=>moveFolder(i,1)}>
+<ArrowDown/>
+</button>
+<button className="icon-button delete" aria-label={'Supprimer '+f.name} disabled={busy} onClick={()=>setRemoveFolder(f)}>
+<Trash2/>
+</button>
+</div>)}{!folders.length&&<p style={{color:'#69716c'}}>Créez votre premier dossier pour classer le voyage.</p>}</div>
+</section>
+<div className="admin-actions">
+<button className="pill" disabled={busy||demo||!photos.length} onClick={optimize}>
+<Sparkles/>Optimiser pour le web</button>
+<span style={{fontSize:13,color:'#69716c'}}>WebP · qualité 80 % · 2 560 px max.</span>
+<button className="quiet" disabled={busy} onClick={async()=>{try{await request('logout');setToken('')}catch(e){toast.error((e as Error).message)}}}>
+<LogOut/>Déconnexion</button>
+</div>
+<div className="admin-filter">
+<label htmlFor="destination">
+<b>Photos du dossier</b>
+</label>
+<select id="destination" value={adminFolder} onChange={e=>setAdminFolder(e.target.value)}>
+<option value="">Sans dossier</option>{folders.map(f=>
+<option key={f.id} value={f.id}>{f.name}</option>)}</select>
+</div>
+<input ref={fileInput} type="file" multiple accept="image/jpeg,image/png,image/webp" hidden onChange={e=>upload(e.target.files)}/>
+<button className="upload-zone" disabled={busy} onClick={()=>fileInput.current?.click()} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();upload(e.dataTransfer.files)}}>
+<Upload/>
+<div>
+<b>Ajouter dans {folders.find(f=>f.id===adminFolder)?.name||'Sans dossier'}</b>
+<p>Déposez ici ou cliquez · JPG, PNG, WebP · compression WebP automatique</p>
+</div>
+</button>{progress&&<div className="notice" role="status">{progress}</div>}{demo?<p className="notice">Les dossiers et photos visibles sont des exemples. Votre premier ajout commencera le véritable album.</p>:<>
+<p style={{fontSize:14,color:'#69716c'}}>{managed.length} photo(s) · Glissez les cartes pour changer l’ordre, ou choisissez un autre dossier.</p>
+<div className="admin-photo-grid">{managed.map((p,i)=>
+<article className={'admin-photo-card '+(draggingPhoto===p.id?'dragging':'')} key={p.id} draggable={!busy} onDragStart={e=>{setDraggingPhoto(p.id);e.dataTransfer.effectAllowed='move'}} onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move'}} onDrop={e=>{e.preventDefault();dropPhoto(i)}} onDragEnd={()=>setDraggingPhoto(null)}>
+<div className="admin-photo-preview"><img src={p.url} alt=""/><span className="drag-handle" aria-hidden="true"><GripVertical/></span><span className="photo-order">{i+1}</span></div>
+<div className="admin-photo-body">{editingPhoto===p.id?
+<form className="photo-title-edit" onSubmit={e=>{e.preventDefault();renamePhoto(p.id)}}><input aria-label="Titre de la photo" value={photoTitle} onChange={e=>setPhotoTitle(e.target.value)} maxLength={80} autoFocus/><button className="icon-button" aria-label="Enregistrer le titre" disabled={busy||!photoTitle.trim()}><Check/></button><button type="button" className="icon-button" aria-label="Annuler" onClick={()=>setEditingPhoto(null)}><X/></button></form>:
+<button className="photo-title-button" onClick={()=>{setEditingPhoto(p.id);setPhotoTitle(p.name.replace(/\.[^.]+$/,''))}}><span>{p.name.replace(/\.[^.]+$/,'')}</span><Pencil/></button>}
+<small>{size(p.size)} · {p.type.replace('image/','').toUpperCase()}</small>
+<label className="photo-folder-select"><span>Dossier</span><select aria-label={'Dossier de '+p.name} value={p.folderId||''} onChange={e=>changePhotoFolder(p.id,e.target.value)} disabled={busy}><option value="">Sans dossier</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+<div className="card-actions"><span className="mobile-order"><button className="icon-button" aria-label={'Monter '+p.name} disabled={busy||i===0} onClick={()=>movePhoto(i,-1)}><ArrowUp/></button><button className="icon-button" aria-label={'Descendre '+p.name} disabled={busy||i===managed.length-1} onClick={()=>movePhoto(i,1)}><ArrowDown/></button></span><button className="icon-button delete" aria-label={'Supprimer '+p.name} disabled={busy} onClick={()=>setRemove(p)}><Trash2/></button></div>
+</div></article>)}</div></>}</>}</DialogContent>
+</Dialog>
+  <AlertDialog open={!!remove} onOpenChange={o=>!o&&setRemove(null)}>
+<AlertDialogContent>
+<AlertDialogHeader>
+<AlertDialogTitle>Supprimer cette photo ?</AlertDialogTitle>
+<AlertDialogDescription>« {remove?.name} » sera retirée de l’album pour tous les visiteurs. Cette action est définitive.</AlertDialogDescription>
+</AlertDialogHeader>
+<AlertDialogFooter>
+<AlertDialogCancel>Annuler</AlertDialogCancel>
+<AlertDialogAction onClick={deletePhoto}>Supprimer</AlertDialogAction>
+</AlertDialogFooter>
+</AlertDialogContent>
+</AlertDialog>
+  <AlertDialog open={!!removeFolder} onOpenChange={o=>!o&&setRemoveFolder(null)}>
+<AlertDialogContent>
+<AlertDialogHeader>
+<AlertDialogTitle>Supprimer le dossier « {removeFolder?.name} » ?</AlertDialogTitle>
+<AlertDialogDescription>Les photos seront conservées et déplacées dans « Sans dossier ».</AlertDialogDescription>
+</AlertDialogHeader>
+<AlertDialogFooter>
+<AlertDialogCancel>Annuler</AlertDialogCancel>
+<AlertDialogAction onClick={deleteFolder}>Supprimer le dossier</AlertDialogAction>
+</AlertDialogFooter>
+</AlertDialogContent>
+</AlertDialog>
+</>;
 }
