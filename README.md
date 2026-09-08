@@ -1,6 +1,6 @@
 # Les échappées de Guillaume
 
-Galerie responsive, diaporama (4,5 secondes), visionneuse, zoom, plein écran, navigation au clavier et balayage tactile. L’Admin permet de créer, renommer, ordonner et supprimer des dossiers, puis d’ajouter, titrer, déplacer, supprimer, réordonner par glisser-déposer et convertir les photos en WebP. Il peut aussi verrouiller le carnet avec un code visiteur à 4 chiffres.
+Galerie responsive, diaporama (4,5 secondes), visionneuse, zoom, plein écran, navigation au clavier et balayage tactile. L’Admin permet de créer, renommer, partager, ordonner et supprimer des dossiers, puis d’ajouter, titrer, déplacer, supprimer, réordonner par glisser-déposer et convertir les photos en WebP. Chaque dossier possède un lien direct vers un diaporama grand écran. L’Admin peut aussi verrouiller le carnet avec un code visiteur à 4 chiffres.
 
 ## Hébergement GitHub Pages
 

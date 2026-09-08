@@ -1,6 +1,6 @@
 'use client';
 import {useState,useEffect,useRef,useCallback} from 'react';
-import {Camera,Play,Pause,ArrowUpRight,LockKeyhole,ArrowLeft,ArrowRight,ArrowUp,ArrowDown,Upload,Trash2,Sparkles,ZoomIn,ZoomOut,X,Maximize,LogOut,Heart,FolderPlus,Folder,Check,Pencil,GripVertical} from 'lucide-react';
+import {Camera,Play,Pause,ArrowUpRight,LockKeyhole,ArrowLeft,ArrowRight,ArrowUp,ArrowDown,Upload,Trash2,Sparkles,ZoomIn,ZoomOut,X,Maximize,LogOut,Heart,FolderPlus,Folder,Check,Pencil,GripVertical,Share2} from 'lucide-react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import {Switch} from '@/components/ui/switch';
 import {AlertDialog,AlertDialogContent,AlertDialogHeader,AlertDialogTitle,AlertDialogDescription,AlertDialogFooter,AlertDialogCancel,AlertDialogAction} from '@/components/ui/alert-dialog';
@@ -14,18 +14,21 @@ const MAX_UPLOAD=820*1024;
 async function prepareUpload(file:File){if(file.size<=MAX_UPLOAD&&file.type==='image/webp')return file;const bitmap=await createImageBitmap(file);let scale=Math.min(1,2560/Math.max(bitmap.width,bitmap.height));let quality=.82,blob:Blob|null=null;for(let pass=0;pass<8;pass++){const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/webp',quality));canvas.width=canvas.height=1;if(blob&&blob.size<=MAX_UPLOAD)break;if(quality>.52)quality-=.08;else scale*=.78}bitmap.close();if(!blob||blob.size>MAX_UPLOAD)throw Error('Cette image reste trop lourde après optimisation. Réduisez-la avant de la déposer.');return new File([blob],file.name.replace(/\.[^.]+$/,'')+'.webp',{type:'image/webp'});}
 export default function Gallery(){
   const [photos,setPhotos]=useState<Photo[]>([]),[folders,setFolders]=useState<FolderItem[]>([]),[demo,setDemo]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');
-  const [folder,setFolder]=useState('all'),[index,setIndex]=useState<number|null>(null),[playing,setPlaying]=useState(false),[zoom,setZoom]=useState(false);
+  const [folder,setFolder]=useState('all'),[sharedFolder,setSharedFolder]=useState<string|null>(null),[index,setIndex]=useState<number|null>(null),[playing,setPlaying]=useState(false),[zoom,setZoom]=useState(false);
   const [admin,setAdmin]=useState(false),[token,setToken]=useState(''),[code,setCode]=useState(''),[busy,setBusy]=useState(false),[progress,setProgress]=useState(''),[remove,setRemove]=useState<Photo|null>(null);
   const [accessMode,setAccessMode]=useState<'checking'|'open'|'locked'>('checking'),[accessToken,setAccessToken]=useState(''),[visitorCode,setVisitorCode]=useState(''),[visitorBusy,setVisitorBusy]=useState(false),[accessEnabled,setAccessEnabled]=useState(false),[newAccessCode,setNewAccessCode]=useState('');
   const [adminFolder,setAdminFolder]=useState<string>(''),[newFolder,setNewFolder]=useState(''),[editing,setEditing]=useState<string|null>(null),[editingName,setEditingName]=useState(''),[removeFolder,setRemoveFolder]=useState<FolderItem|null>(null);
   const [editingPhoto,setEditingPhoto]=useState<string|null>(null),[photoTitle,setPhotoTitle]=useState(''),[draggingPhoto,setDraggingPhoto]=useState<string|null>(null);
   const fileInput=useRef<HTMLInputElement>(null),touch=useRef(0),viewer=useRef<HTMLDivElement>(null);
-  const visible=folder==='all'?photos:photos.filter(p=>p.folderId===folder);
+  const activeFolder=sharedFolder||folder;
+  const visible=activeFolder==='all'?photos:photos.filter(p=>p.folderId===activeFolder);
   const managed=photos.filter(p=>(p.folderId||'')===adminFolder);
   const load=useCallback(async(visitor='')=>{try{const suffix=visitor?'?access='+encodeURIComponent(visitor):'';const r=await fetch(API+suffix,{cache:'no-store',headers:visitor?{Authorization:'Bearer '+visitor}:{}});if(!r.ok)throw Error(r.status===401?'Ce carnet est protégé par un code.':'Impossible de charger les photos. Réessayez dans un instant.');const d=await r.json();setDemo(!d.initialized);setPhotos(d.initialized?d.photos:demoPhotos);setFolders(d.initialized?d.folders:demoFolders);setError('')}catch(e){setError((e as Error).message)}finally{setLoading(false)}},[]);
   useEffect(()=>{(async()=>{try{const r=await fetch(API+'?action=access-status',{cache:'no-store'});const d=await r.json();setAccessEnabled(!!d.enabled);if(d.enabled){setAccessMode('locked');setLoading(false)}else{setAccessMode('open');await load()}}catch(e){setError('Impossible de vérifier l’accès au carnet.');setLoading(false)}})()},[load]);
+  useEffect(()=>{const album=new URLSearchParams(window.location.search).get('album');if(album)setSharedFolder(album)},[]);
   useEffect(()=>{if(folder!=='all'&&!folders.some(f=>f.id===folder))setFolder('all');if(adminFolder&&!folders.some(f=>f.id===adminFolder))setAdminFolder('')},[folders,folder,adminFolder]);
   const next=useCallback((n:number)=>{setIndex(i=>i===null?null:(i+n+visible.length)%visible.length);setZoom(false)},[visible.length]);
+  useEffect(()=>{if(sharedFolder&&!loading){setIndex(visible.length?0:null);setPlaying(visible.length>1);setZoom(false)}},[sharedFolder,loading]);
   useEffect(()=>{if(!playing||index===null||zoom)return;const id=setInterval(()=>next(1),4500);return()=>clearInterval(id)},[playing,index,zoom,next]);
   useEffect(()=>{if(index===null)return;const key=(e:KeyboardEvent)=>{if(e.key==='ArrowRight'){e.preventDefault();next(1)}if(e.key==='ArrowLeft'){e.preventDefault();next(-1)}if(e.code==='Space'&&e.target===document.body){e.preventDefault();setPlaying(v=>!v)}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[index,next]);
   async function request(action:string,body?:BodyInit){const r=await fetch(API+'?action='+action,{method:'POST',body,headers:{Authorization:'Bearer '+token}});const isJson=r.headers.get('content-type')?.includes('application/json');const d=isJson?await r.json():{error:r.status===413?'La photo est trop lourde pour l’envoi. Elle sera optimisée automatiquement : réessayez.':await r.text()};if(!r.ok){if(r.status===401)setToken('');throw Error(d.error||'La modification a échoué. Réessayez.')}return d}
@@ -42,6 +45,8 @@ export default function Gallery(){
   async function renamePhoto(id:string){if(!photoTitle.trim())return;setBusy(true);try{await request('photo-rename',JSON.stringify({id,name:photoTitle}));await load(accessToken);setEditingPhoto(null);toast.success('Titre enregistré')}catch(e){toast.error((e as Error).message)}finally{setBusy(false)}}
   async function dropPhoto(target:number){if(!draggingPhoto)return;const source=managed.findIndex(p=>p.id===draggingPhoto);setDraggingPhoto(null);if(source<0||source===target)return;const list=[...managed],moved=list.splice(source,1)[0];list.splice(target,0,moved);setBusy(true);try{await request('reorder',JSON.stringify({ids:list.map(p=>p.id),folderId:adminFolder||null}));await load(accessToken);toast.success('Nouvel ordre enregistré')}catch(e){toast.error((e as Error).message)}finally{setBusy(false)}}
   async function deletePhoto(){if(!remove)return;setBusy(true);try{await request('delete',JSON.stringify({id:remove.id}));await load(accessToken);toast.success('Photo supprimée')}catch(e){toast.error((e as Error).message)}finally{setBusy(false);setRemove(null)}}
+  async function shareAlbum(id:string,name:string){const url=new URL(window.location.href);url.search='';url.searchParams.set('album',id);try{if(navigator.share)await navigator.share({title:'Album · '+name,text:'Découvrez les photos de '+name,url:url.toString()});else{await navigator.clipboard.writeText(url.toString());toast.success('Lien de l’album copié')}}catch(e){if((e as Error).name!=='AbortError'){try{await navigator.clipboard.writeText(url.toString());toast.success('Lien de l’album copié')}catch{toast.error('Impossible de copier le lien.')}}}}
+  function closeSharedAlbum(){const id=sharedFolder;const url=new URL(window.location.href);url.searchParams.delete('album');window.history.replaceState({},'',url);setSharedFolder(null);if(id)setFolder(id);setIndex(null);setPlaying(false);setZoom(false)}
   async function optimize(){setBusy(true);let saved=0;try{for(let i=0;i<photos.length;i++){const p=photos[i];setProgress(`Optimisation ${i+1}/${photos.length} · ${p.name}`);const res=await fetch(p.url);if(!res.ok)throw Error('Impossible de lire '+p.name);const blob=await res.blob(),bitmap=await createImageBitmap(blob);if(bitmap.width*bitmap.height>100e6){bitmap.close();throw Error('Image trop grande : '+p.name)}const scale=Math.min(1,2560/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const webp=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/webp',.8));canvas.width=canvas.height=1;if(!webp||webp.type!=='image/webp')throw Error('Votre navigateur ne prend pas en charge la conversion WebP.');if(webp.size>=p.size&&p.type==='image/webp')continue;const data=new FormData();data.append('file',webp,p.name.replace(/\.[^.]+$/,'')+'.webp');data.append('id',p.id);await request('replace',data);saved+=Math.max(0,p.size-webp.size)}toast.success('Photos optimisées en WebP · '+size(saved)+' économisés')}catch(e){toast.error((e as Error).message)}finally{await load(accessToken);setProgress('');setBusy(false)}}
   async function fullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await viewer.current?.requestFullscreen()}catch{toast.error('Le plein écran n’est pas disponible sur ce navigateur.')}}
   if(accessMode==='checking')return <div className="access-screen">
@@ -66,6 +71,27 @@ export default function Gallery(){
 </div>
 </main>
 </>;
+  if(sharedFolder){const sharedAlbum=folders.find(f=>f.id===sharedFolder);return <>
+<Toaster position="bottom-center" richColors/>
+<div className="shared-slideshow" ref={viewer}>
+<header className="shared-bar">
+<div className="shared-identity"><span className="brand-icon"><Camera/></span><span><small>Album photo</small><b>{sharedAlbum?.name||'Souvenirs partagés'}</b></span></div>
+<div className="shared-actions">
+{visible.length>1&&<button className={'icon-button '+(playing?'active':'')} aria-label={playing?'Mettre en pause':'Lancer le diaporama'} onClick={()=>{setPlaying(!playing);setZoom(false)}}>{playing?<Pause/>:<Play/>}</button>}
+<button className="icon-button" aria-label="Plein écran" onClick={fullscreen}><Maximize/></button>
+<button className="shared-close" onClick={closeSharedAlbum}><X/><span>Voir tout le carnet</span></button>
+</div>
+</header>
+{loading?<div className="shared-message">Ouverture de l’album…</div>:!sharedAlbum?<div className="shared-message"><Folder/><h1>Album introuvable</h1><p>Ce lien ne correspond plus à un album disponible.</p><button className="pill" onClick={closeSharedAlbum}>Voir le carnet</button></div>:!visible.length?<div className="shared-message"><Folder/><h1>{sharedAlbum.name}</h1><p>Cet album attend encore ses premières photos.</p><button className="pill" onClick={closeSharedAlbum}>Voir le carnet</button></div>:index!==null&&visible[index]?<>
+<div className={'shared-stage '+(zoom?'zoomed':'')} onTouchStart={e=>touch.current=e.touches[0].clientX} onTouchEnd={e=>{if(zoom)return;const d=e.changedTouches[0].clientX-touch.current;if(Math.abs(d)>60)next(d<0?1:-1)}}>
+<img key={visible[index].id} className="shared-image" src={visible[index].url} alt={visible[index].name} onClick={()=>{setZoom(!zoom);setPlaying(false)}}/>
+{!zoom&&visible.length>1&&<><button className="icon-button nav-arrow prev" aria-label="Photo précédente" onClick={()=>next(-1)}><ArrowLeft/></button><button className="icon-button nav-arrow next" aria-label="Photo suivante" onClick={()=>next(1)}><ArrowRight/></button></>}
+<div className="shared-caption"><b>{visible[index].name.replace(/\.[^.]+$/,'')}</b><span>{String(index+1).padStart(2,'0')} / {String(visible.length).padStart(2,'0')}</span></div>
+</div>
+<div className="shared-filmstrip">{visible.map((p,i)=><button key={p.id} className={'thumb '+(i===index?'selected':'')} aria-label={'Voir '+p.name} aria-current={i===index?'true':undefined} onClick={()=>{setIndex(i);setZoom(false)}}><img src={p.url} alt=""/></button>)}</div>
+</>:null}
+</div>
+</>}
   return <>
 <Toaster position="bottom-center" richColors/>
 <div className="shell">
@@ -94,7 +120,7 @@ export default function Gallery(){
 <button key={f.id} className={'folder-tab '+(folder===f.id?'active':'')} onClick={()=>setFolder(f.id)}>{f.name}</button>)}</nav>}<div className="toolbar">
 <strong>{folder==='all'?'Au fil du voyage':folders.find(f=>f.id===folder)?.name} <span style={{color:'#8b948e',marginLeft:10}}>{loading?'…':String(visible.length).padStart(2,'0')}</span>
 </strong>
-<span>{demo?'Photos de démonstration':'L’album de famille'}</span>
+{folder==='all'?<span>{demo?'Photos de démonstration':'L’album de famille'}</span>:<button className="quiet share-album" onClick={()=>shareAlbum(folder,folders.find(f=>f.id===folder)?.name||'Album')}><Share2/>Partager cet album</button>}
 </div>{error?<div className="notice error" role="alert">{error} <button className="quiet" onClick={()=>load(accessToken)}>Réessayer</button>
 </div>:loading?<div className="empty" role="status">Ouverture de l’album…</div>:visible.length?<div className="gallery">{visible.map((p,i)=>
 <button className="photo" key={p.id} onClick={()=>{setIndex(i);setPlaying(false);setZoom(false)}} aria-label={'Ouvrir '+p.name}>
@@ -187,6 +213,7 @@ export default function Gallery(){
 <button className="quiet folder-name" onClick={()=>setAdminFolder(f.id)}>
 <Folder/>{f.name}</button>
 <span className="folder-count">{photos.filter(p=>p.folderId===f.id).length} photo(s)</span>
+<button className="icon-button" aria-label={'Partager '+f.name} onClick={()=>shareAlbum(f.id,f.name)}><Share2/></button>
 <button className="icon-button" aria-label={'Renommer '+f.name} onClick={()=>{setEditing(f.id);setEditingName(f.name)}}>
 <Pencil/>
 </button>
